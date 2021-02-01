@@ -54,3 +54,16 @@ Keep model decoupled from technical concerns
 build persistence-ignorant code
 
 create stable APIs around our domain 
+
+### Chapter 1. Domain Modeling
+
+We build a simple domain model that can allocate orders to batches of stock.
+
+Entities
+
+Value Object
+
+### Chapter 2. Repository Pattern
+
+Repository Pattern: A simplifying abstraction over the data storage, allowing us to decouple our model layer from the data layer.
+
