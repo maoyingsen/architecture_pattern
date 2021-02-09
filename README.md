@@ -227,3 +227,84 @@ class SqlAlchemyRepository(AbstractRepository):
 
 Coupling(耦合)： When we're unable to change component A for fear of breaking component B, we say that the component have become coupled.
 
+## Chapter 4. Our First Use Case: Flask API and Service Layer
+
+So far, we have the core of our **domain model** and the **domain service** we need to allocate orders, and we have the **repository interface** for permanent storage. (p41) 
+
+We're going to add a Flask API endpoint(**service layer**) in front of our allocate domain service, which will server as the entrypoint to our domain model.(p39)
+
+<img src="D:\tutorial\Architecture_Patterns_with_Python\service_layer.PNG" alt="server_layer" style="zoom:90%;" />
+
+### Service layer
+
+Serivce layer consists of service layer function and Flask endpoint.
+
+```python
+#service.py
+def allocate(line: OrderLine, repo: AbstractRepository, session) -> str:
+    batches = repo.list()
+    if not is_valid_sku(line.sku, batches):
+        raise InvalidSku(f'Invalid sku {line.sku}')
+    batchref = model.allocate(line, batches)
+    session.commit()
+    return batchref
+```
+
+Typical service-layer function have similar steps:
+
+1. Fetch some objects from the repository
+2. Validate our input against database state and handle error
+3. Call a domain service
+4. Save/update any state changed
+
+The last step is a little unsatifactory at the moment, as our service layer is tightly coupled to our database layer. **We'll improve that in Chapter 6**
+
+Flask app delegating to service layer.
+
+```python
+#flask_app.py
+@app.route("/allocate", methods=['POST'])
+def allocate_endpoint():
+    session = get_session()
+    repo = repository.SqlAlchemyRepository(session)
+    line = model.OrderLine(
+        request.json['orderid'],
+        request.json['sku'],
+        request.json['qty'],
+    )
+    try:
+        batchref = services.allocate(line, repo, session)
+    except (model.OutOfStock, services.InvalidSku) as e:
+        return jsonify({'message': str(e)}), 400
+
+    return jsonify({'batchref': batchref}), 201
+```
+
+Flask app does the standard web stuff:
+
+1. Instantiate a database session and some repository objects
+2. Parse information out of POST parameter
+3. Return JSON responses with the appropriate status code
+
+### Domain Service
+
+A piece of logic that belongs in the domain model but doesn't sit naturally inside a stateful entity or value object. For example, if you were building a shopping cart application, you might choose to build taxation rules as a domain service. Calculating tax is a separate job fromupdating thecart,and it's an important part ofthe model, but it doesn't 'tseem right to havea persisted entity for thejob. Instead astateless TaxCalculator class or a calculate_tax function can do the job. 
+
+```python
+# model.py
+def allocate(line: OrderLine, batches: List[Batch]) -> str:
+    try:
+        batch = next(
+            b for b in sorted(batches) if b.can_allocate(line)
+        )
+        batch.allocate(line)
+        return batch.reference
+    except StopIteration:
+        raise OutOfStock(f'Out of stock for sku {line.sku}')
+```
+
+
+
+<img src="D:\tutorial\Architecture_Patterns_with_Python\file_structure.PNG" alt="file_structure" style="zoom:65%;" />
+
+<img src="D:\tutorial\Architecture_Patterns_with_Python\architecture.PNG" alt="architecture" style="zoom:75%;" />
