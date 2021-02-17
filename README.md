@@ -67,7 +67,7 @@ create stable APIs around our domain
 
 We have separate systems that are responsible for buying stock, selling stock to customers, and shipping goods to customers. The allocation system needs to coordinate the process by allocating stock to a custormers' orders. (p15) 
 
-<img src="D:\tutorial\Architecture_Patterns_with_Python\Allocation_system.PNG" alt="Allocation_System" style="zoom:75%;" />
+<img src="Allocation_system.PNG" alt="Allocation_System" style="zoom:75%;" />
 
 Now we build a simple domain model that can allocate orders to batches of stock. Below is the related domain knowlege.
 
@@ -79,7 +79,7 @@ Now we build a simple domain model that can allocate orders to batches of stock.
 
  A batch now keeps track of a set of allocated OrderLine objects. When we allocate, if we have enought available quantity, we just add to the set. (p19)
 
-<img src="D:\tutorial\Architecture_Patterns_with_Python\batch_order_UML.PNG" alt="batch_order_UML" style="zoom:80%;" />
+<img src="batch_order_UML.PNG" alt="batch_order_UML" style="zoom:80%;" />
 
 
 
@@ -113,7 +113,7 @@ def allocate(line: OrderLine, batches: List[Batch]) -> str:
 
 ### Wrap Up
 
-<img src="D:\tutorial\Architecture_Patterns_with_Python\domain_modeling.PNG" alt="domain_modeling" style="zoom:67%;" />
+<img src="domain_modeling.PNG" alt="domain_modeling" style="zoom:67%;" />
 
 ## Chapter 2. Repository Pattern
 
@@ -122,11 +122,11 @@ def allocate(line: OrderLine, batches: List[Batch]) -> str:
 * A simplifying abstraction over the data storage, allowing us to decouple our model layer from the data layer.
 * The repository pattern is an abstraction over persistent storage. It hids the boring details of data access by pretending that all of our data is in memory (the objects are all in memory). (p27)
 
-![repositories](D:\tutorial\Architecture_Patterns_with_Python\repositories.PNG)
+![repositories](repositories.PNG)
 
 * Our domain model has no dependencies whatsoever (Depending on a helper library is fine; depending on an ORM or a web framework is not). (p25)
 
-![onion_architecture](D:\tutorial\Architecture_Patterns_with_Python\onion_architecture.PNG)
+<img src="onion_architecture.PNG" alt="onion_architecture" style="zoom:75%;" />
 
 * We don't want infrastructure concerns bleeding over into our domain model and slowing our unit tests or our ability to make changes.(p25)
 
@@ -136,19 +136,7 @@ def allocate(line: OrderLine, batches: List[Batch]) -> str:
 
 **persistence**（持久化）: 把数据（如内存中的对象）保存到可永久报错的存储设备中（如磁盘）
 
-在目前的企业应用系统设计中，MVC，即 Model（模型）- View（视图）- Control（控制）为主要的系统架构模式。MVC 中的 Model 包含了复杂的业务逻辑和数据逻辑，以及数据存取机制（如 JDBC的连接、SQL生成和Statement创建、还有ResultSet结果集的读取等）等。*将这些复杂的业务逻辑和数据逻辑分离，以将系统的紧耦 合关系转化为松耦合关系（即解耦合），是降低系统耦合度迫切要做的，也是持久化要做的工作。*MVC 模式实现了架构上将表现层（即View）和数据处理层（即Model）分离的解耦合，而持久化的设计则实现了数据处理层内部的业务逻辑和数据逻辑分离的解耦合。 而 ORM 作为持久化设计中的最重要也最复杂的技术，也是目前业界热点技术。
-
-简单来说，按通常的系统设计，使用 JDBC 操作数据库，业务处理逻辑和数据存取逻辑是混杂在一起的。
-一般基本都是如下几个步骤：
-1、建立数据库连接，获得 Connection 对象。
-2、根据用户的输入组装查询 SQL 语句。
-3、根据 SQL 语句建立 Statement 对象 或者 PreparedStatement 对象。
-4、用 Connection 对象执行 SQL语句，获得结果集 ResultSet 对象。
-5、然后一条一条读取结果集 ResultSet 对象中的数据。
-6、根据读取到的数据，按特定的业务逻辑进行计算。
-7、根据计算得到的结果再组装更新 SQL 语句。
-8、再使用 Connection 对象执行更新 SQL 语句，以更新数据库中的数据。
-7、最后依次关闭各个 Statement 对象和 Connection 对象。
+在目前的企业应用系统设计中，MVC，即 Model（模型）- View（视图）- Control（控制）为主要的系统架构模式。MVC 中的 Model 包含了复杂的业务逻辑和数据逻辑，以及数据存取机制（如 JDBC的连接、SQL生成和Statement创建、还有ResultSet结果集的读取等）等。*将这些复杂的业务逻辑和数据逻辑分离，以将系统的紧耦 合关系转化为松耦合关系（即解耦合），是降低系统耦合度迫切要做的，也是持久化要做的工作。*MVC 模式实现了架构上将表现层（即View）和数据处理层（即Model）分离的解耦合，而持久化的设计则实现了数据处理层内部的业务逻辑和数据逻辑分离的解耦合。 
 
 * **SQLAlchemy classical mapping**: Define the schema separately, and to define an explicit mapper for how to convert between the schema and our domain model. 
 
@@ -171,6 +159,23 @@ def start_mappers():
 
 * The ORM imports the domain model, and not the other way around.
 * If we call the mapper function, we will be able to easily load and save domain model instances from and to the database. But if we never call that function, our domain model classes stay blissfully unaware of the database.
+* The *start_mappers()* function is binded in the session, which is used every time ORM talks to database.
+
+```python
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, clear_mappers
+from orm import metadata, start_mappers
+
+def in_memory_db():
+    engine = create_engine('sqlite:///:memory:')
+    metadata.create_all(engine)
+    return engine
+
+def session(in_memory_db):
+    start_mappers()
+    yield sessionmaker(bind=in_memory_db)()
+    clear_mappers()
+```
 
 Using SQLAlchemy directly in our API endpoint:
 
@@ -183,31 +188,19 @@ def allocate_endpoint():
     batches = session.query(Batch).all()
     # call our domain service
     allocate(line, batches)
-	#save the allocation back to the database
+	  #save the allocation back to the database
     session.commit()
     return 201
 ```
-
-
 
 ### The Repository Pattern
 
 * The repository pattern is an abstraction over persistent storage. It hides the boring details of data access by predending that all of our data is in memory.
 * We swape the *SQLAlchemy abstraction(session.query(Batch))* for a *repository one (batches_repo.get)*
 
-<img src="D:\tutorial\Architecture_Patterns_with_Python\repository.PNG" alt="repository" style="zoom:50%;" />
+<img src="repository.PNG" alt="repository" style="zoom:50%;" />
 
-Using the repository directly in our API endpoint:
 
-```python
-@flask.route.gubbins
-def allocate_endpoint():
-	batches = SqlAlchemyRepository.list()
-	lines = [OrderLine(l['orderid'], l['sku'], l['qty']) for l in request.params...]
-	allocate(lines, batches)
-	session.commit()
-	return 201
-```
 
 ```python
 class SqlAlchemyRepository(AbstractRepository):
@@ -221,6 +214,18 @@ class SqlAlchemyRepository(AbstractRepository):
 		return self.session.query(model.Batch).all()
 ```
 
+Using the repository directly in our API endpoint:
+
+```python
+@flask.route.gubbins
+def allocate_endpoint():
+	batches = SqlAlchemyRepository.list()
+	lines = [OrderLine(l['orderid'], l['sku'], l['qty']) for l in request.params...]
+	allocate(lines, batches)
+	session.commit()
+	return 201
+```
+
 
 
 ## Chapter 3. A Brief Interlude: On Coupling and Abstractions
@@ -231,9 +236,11 @@ Coupling(耦合)： When we're unable to change component A for fear of breaking
 
 So far, we have the core of our **domain model** and the **domain service** we need to allocate orders, and we have the **repository interface** for permanent storage. (p41) 
 
-We're going to add a Flask API endpoint(**service layer**) in front of our allocate domain service, which will server as the entrypoint to our domain model.(p39)
+We're going to add a Flask API endpoint(**service layer**) in front of our allocate domain service, which will server as the entrypoint to our domain model.(p39). The service layer defines the *use case* of the system.
 
-<img src="D:\tutorial\Architecture_Patterns_with_Python\service_layer.PNG" alt="server_layer" style="zoom:90%;" />
+
+
+<img src="service_layer.PNG" alt="image" style="zoom:85%;" />
 
 ### Service layer
 
@@ -288,7 +295,7 @@ Flask app does the standard web stuff:
 
 ### Domain Service
 
-A piece of logic that belongs in the domain model but doesn't sit naturally inside a stateful entity or value object. For example, if you were building a shopping cart application, you might choose to build taxation rules as a domain service. Calculating tax is a separate job fromupdating thecart,and it's an important part ofthe model, but it doesn't 'tseem right to havea persisted entity for thejob. Instead astateless TaxCalculator class or a calculate_tax function can do the job. 
+A piece of logic that *belongs in the domain model* but doesn't sit naturally inside a stateful entity or value object. For example, if you were building a shopping cart application, you might choose to build taxation rules as a domain service. Calculating tax is a separate job from updating the cart,and it's an important part ofthe model, but it doesn't  seem right to have a persisted entity for the job. Instead a stateless TaxCalculator class or a calculate_tax function can do the job. 
 
 ```python
 # model.py
@@ -303,8 +310,58 @@ def allocate(line: OrderLine, batches: List[Batch]) -> str:
         raise OutOfStock(f'Out of stock for sku {line.sku}')
 ```
 
+### The difference between Service Layer and Domain Service
+
+The main goal of *service layer*, also called *application service*, is:
+
+* handle the requests from the outside world
+* get some data from the database
+* update the domain model
+* Persiste any changes
+
+These are boring work that has to happen for every operation in your system, and *keeping it separate from business logic helps to keep things tidy.*
+
+### Directory Structure and Dependencies
+
+Adpaters will fill up with any other abstractions around external I/O (e.g. a reds_client.py). 
+
+<img src="file_structure.PNG" alt="file_structure" style="zoom:50%;" />
+
+<img src="architecture.PNG" alt="architecture" style="zoom:50%;" />
 
 
-<img src="D:\tutorial\Architecture_Patterns_with_Python\file_structure.PNG" alt="file_structure" style="zoom:65%;" />
 
-<img src="D:\tutorial\Architecture_Patterns_with_Python\architecture.PNG" alt="architecture" style="zoom:75%;" />
+* The service layer is still tightly couple to the domain, because its API is expressed in terms of OrderLine objects. We'll fix that in Chapter 5.
+* The service layer is tightly coupled to a session object. In chapter 6 we'll improve that by introducing one more pattern that works closely with the Respository and Service Layer patterns, the Unit of Work pattern.
+
+## SQLAlchemy
+
+### Engine
+
+* The *engine* is how SQLAlchemy communicates with your database. 
+* When creating the *engine* you should add your database URL.
+
+```python
+from sqlalchemy import create_engine
+engine = create_engine('sqlite:///:memory:', echo = True)
+```
+
+### Session
+
+* The SQLAlchemy ORM must have a *session* to make the middle-ground between the objects we will deal with in Python and the engine that actually communicates with the database.
+* You will have to create the Session object everytime you want to communicate with the database.
+* We can create the *session* by using function *sessionmaker* that we'll pass our engine to.
+
+```python
+from sqlalchemy.orm import sessionmaker
+Session = sessionmaker(bind=engine)
+```
+
+* You should call session make once in your application at the global scope, and once you have access to the custom Session class, you can instantiate it as many times as you need without passing any arguments to it.
+
+```python
+session = Session()
+```
+
+
+
