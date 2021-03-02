@@ -59,9 +59,9 @@ create stable APIs around our domain
 
 ### Domain Modeling Concept
 
-* Among the three-layered architecture (presentation layer, business logic, database layer), the domain model is close to business logic. The domain model is the mental map that business owners have of their buseinesses. (p14) 
-* The book shows the basic of building a domain model, and building an architecture around it that leaves the model as free as possible from external constraints. (p15)
-* Domain modeling is closest to the business. Make it easy to understand and modify. (22)
+* Among the three-layered architecture (presentation layer, business logic, database layer), the **domain model** is close to business logic. The **domain model** is the mental map that business owners have of their business. (p14) 
+* The book shows the basic of building a domain model, and building an architecture around it that *leaves the model as free as possible from external constraints*. (p15)
+* Domain modeling is closest to the business. *Make it easy to understand and modify*. (22)
 
 ### The Allocation System
 
@@ -78,19 +78,39 @@ Now we build a simple domain model that can allocate orders to batches of stock.
 
  A batch now keeps track of a set of allocated OrderLine objects. When we allocate, if we have enought available quantity, we just add to the set. (p19)
 
-<img src="batch_order_UML.PNG" alt="batch_order_UML" style="zoom:80%;" />
-
-
-
 **Value Object**
 
 * Whenever we have a business concept that has data but no identity, we often choose to represent it using *Value Object* pattern. A value object is any domain object that is uniquely identified by the data it holds; we usually make them immutable. (p19)
 * An order line is uniquely identifies by its order ID, SKU, and quantity; if we change one of those values, we now have a new line. (p20)
 
+```python
+@dataclass(frozen = True)
+class OrderLine:
+    orderid: int
+    sku: str
+    qty: int
+```
+
 **Entities**
 
 * Entities, unlike values, have identity equality. We can change their values, and they are sitll recognizable the same thing. （p20)
-* Batches, in our example, are entities. We can allocate lines to batch, or change the data that we expect it to arrive, and it will still be the same entity. （p20)
+* A batch is identifies by a reference and thus is classified as entities. We can allocate lines to batch, or change the data that we expect it to arrive, and it will still be the same entity. （p20)
+* We can use the *eq* magic function to identify whether two batches are same as below.
+
+```python
+class Batch:
+    def __init__(self, ref: str, sku: str, qty: int, eta, Optional[Date]):
+        self.reference = ref
+        self.sku = sku
+        self.eta = eta
+        self._purchased_quantity = qty
+        self._allocations = set()
+
+    def __eq__(self, other):
+        if not isinstance(other, Batch):
+            return False
+        return other.reference = self.reference
+```
 
 **Domain Service**
 
@@ -111,6 +131,8 @@ def allocate(line: OrderLine, batches: List[Batch]) -> str:
 * Domain services are not the same thing as services from the *service layer*. A domain service represents a business concept or process, whereas a service-layer service represents a use case for your application. *Often the service layer will call a domain service*.（p23)
 
 ### Wrap Up
+
+<img src="batch_order_UML.PNG" alt="batch_order_UML" style="zoom:80%;" />
 
 <img src="domain_modeling.PNG" alt="domain_modeling" style="zoom:67%;" />
 
