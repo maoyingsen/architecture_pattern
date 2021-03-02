@@ -1,7 +1,7 @@
 from dataclasses import dataclass
+from typing import List, Optional
 
-
-def allocate(batch, l):
+def allocate(line: OrderLine, batches: List[Batch]) -> str:
     """
     for line in l:
         if batch.can_allocate(line):
@@ -17,25 +17,23 @@ class OrderLine:
     qty: int
 
 class Batch:
-    def __init__(self, ref, sku, eta, quantity):
-        self.ref = ref
+    def __init__(self, ref: str, sku: str, qty: int, eta, Optional[Date]):
+        self.reference = ref
         self.sku = sku
         self.eta = eta
-        self.quantity = quantity
-        self._allocation = set()
+        self._purchased_quantity = qty
+        self._allocations = set()
 
-    def can_allocate(self, line):
-        if line.qty > self.quantity:
-            return False
-        if line.sku != self.sku:
-            return False
-        return True
+    def can_allocate(self, line: OrderLine) -> bool:
+        return self.sku == line.sku and self.available_num >= line.qty
     
     def allocate(self, line):
-        self._allocation.add(line)
+        if self.can_allocate(line):
+            self._allocation.add(line)
     
     def dellocate(self, line):
-        self._allocation.remove(line)
+        if line in self._allocations:
+            self._allocation.remove(line)
 
     @property
     def available_num(self):
