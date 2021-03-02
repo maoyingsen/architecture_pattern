@@ -69,13 +69,12 @@ We have separate systems that are responsible for buying stock, selling stock to
 
 <img src="Allocation_system.PNG" alt="Allocation_System" style="zoom:75%;" />
 
-Now we build a simple domain model that can allocate orders to batches of stock. Below is the related domain knowlege.
+Now we build a simple domain model that can allocate orders to batches of stock. Below is the related **domain knowlege** for the allocation system.
 
 * Customers place orders. An order is identified by an order reference and comprises multiple order lines, where each line has  SKU and a quantity.
-
 * Purchasing department orders small batches of stock. A batch of stock has a unique ID called a reference, a SKU, and a quantity.
-
-* When we allocate an order line to a batch, we will send stock from that specific batch to the customer's delivery address.
+* When we allocate an order line to a batch, we will send stock from that specific batch to the customer's delivery address. When we allocate x units of stock to a batch, the available quantity is reduced by x.
+* Batches have an ETA if they are currently shipping, or they may be in warehouse stock. We allocate to warehouse stock in preference to shipment batches. We allocate to shipment batches in order of which has the earliest ETA.
 
  A batch now keeps track of a set of allocated OrderLine objects. When we allocate, if we have enought available quantity, we just add to the set. (p19)
 
