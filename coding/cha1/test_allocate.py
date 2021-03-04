@@ -1,13 +1,14 @@
 import pytest
 from model import Batch, OrderLine, allocate
+from datetime import date
 
 @pytest.fixture
 def batch_abc():
-    return Batch(2345, "abc", "today", 20)
+    return Batch("in-stock-batch-ref", "HIGHBROW-POSTER", 20, eta=None)
 
 @pytest.fixture
 def line_abc():
-    return OrderLine(123, "abc", 10)
+    return OrderLine("in-stock-batch-ref", "HIGHBROW-POSTER", 10)
 
 @pytest.fixture
 def line_bcd():
@@ -20,8 +21,8 @@ def make_batch_and_line(sku, batch_qty, line_qty):
     )
 
 def test_allocate_with_same_sku(batch_abc, line_abc):
-    allocate(batch_abc, line_abc)
-    assert batch_abc.available_num == 10
+    allocate(line_abc, [batch_abc])
+    assert batch_abc.available_quantity == 10
 
 def test_can_allocate_if_available_greater_than_required(batch_abc, line_abc):
     assert batch_abc.can_allocate(line_abc)

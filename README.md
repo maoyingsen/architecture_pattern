@@ -95,7 +95,8 @@ class OrderLine:
 
 * Entities, unlike values, have identity equality. We can change their values, and they are sitll recognizable the same thing. （p20)
 * A batch is identifies by a reference and thus is classified as entities. We can allocate lines to batch, or change the data that we expect it to arrive, and it will still be the same entity. （p20)
-* We can use the *eq* magic function to identify whether two batches are same as below.
+* The `__eq___` magic function to identify whether two batches are same as below.
+* The ```__hash__``` magic function make Batch object *hashable* and can be used in set() or dict(). (You shouldn't modify ```__hash__``` without modifying ```__eq__```)
 
 ```python
 class Batch:
@@ -110,6 +111,9 @@ class Batch:
         if not isinstance(other, Batch):
             return False
         return other.reference = self.reference
+    
+    def __hash__(self):
+        return hash(self.reference)
 ```
 
 **Domain Service**
@@ -138,30 +142,32 @@ def allocate(line: OrderLine, batches: List[Batch]) -> str:
 
 ## Chapter 2. Repository Pattern
 
-### Repository Pattern/依赖倒置原则（The Dependency Inversion Principle）
+In this chapter we'll need a way to retrieve batch info from the database and instantiate our domain model objects from it, and we'll also need a way of saving them back to the database. (p25)
 
-* A simplifying abstraction over the data storage, allowing us to decouple our model layer from the data layer.
-* The repository pattern is an abstraction over persistent storage. It hids the boring details of data access by pretending that all of our data is in memory (the objects are all in memory). (p27)
+### Inverting the Dependency using classical mapping: ORM Depends on Model
 
-![repositories](repositories.PNG)
+*High level modules (model.py) should not depend upon low level modules (orm.py). Both should depend upon abstractions.*
 
-* Our domain model has no dependencies whatsoever (Depending on a helper library is fine; depending on an ORM or a web framework is not). (p25)
+​																																							                 --- 依赖倒置原则（The Dependency Inversion Principle）
 
-<img src="onion_architecture.PNG" alt="onion_architecture" style="zoom:75%;" />
-
-* We don't want infrastructure concerns bleeding over into our domain model and slowing our unit tests or our ability to make changes.(p25)
-
-### ORM
-
-*  **persistence ignorance**: the domain model doesn't need to know anything about how data is loaded and persisted.(p26)
-
-**persistence**（持久化）: 把数据（如内存中的对象）保存到可永久报错的存储设备中（如磁盘）
+*  ORM ensures the *persistence ignorance* (the domain model doesn't need to know anything about how data is loaded and persisted).(p26)
 
 在目前的企业应用系统设计中，MVC，即 Model（模型）- View（视图）- Control（控制）为主要的系统架构模式。MVC 中的 Model 包含了复杂的业务逻辑和数据逻辑，以及数据存取机制（如 JDBC的连接、SQL生成和Statement创建、还有ResultSet结果集的读取等）等。*将这些复杂的业务逻辑和数据逻辑分离，以将系统的紧耦 合关系转化为松耦合关系（即解耦合），是降低系统耦合度迫切要做的，也是持久化要做的工作。*MVC 模式实现了架构上将表现层（即View）和数据处理层（即Model）分离的解耦合，而持久化的设计则实现了数据处理层内部的业务逻辑和数据逻辑分离的解耦合。 
 
 * **SQLAlchemy classical mapping**: Define the schema separately, and to define an explicit mapper for how to convert between the schema and our domain model. 
+* The ORM (the data persistence that describes how data is loaded and persisted) imports the domain model, and not the other way around.
 
 ```python
+#model.py
+@dataclass(unsafe_hash=True)
+class OrderLine:
+    orderid: str
+    sku: str
+    qty: int
+```
+
+```python
+#orm.py
 from sqlalchemy.orm import mapper, relationship
 import model
 
@@ -171,14 +177,12 @@ order_lines = Table(
     Column('id', Integer, primary_key=True, autoincrement=True),
     Column('sku', String(255)),
     Column('qty', Integer, nullable=False),
-    Column('orderid', String(255)),
-)
+    Column('orderid', String(255)),)
 
 def start_mappers():
-    lines_mapper = mapper(Model.Orderline, order_lines)
+    lines_mapper = mapper(model.Orderline, order_lines)
 ```
 
-* The ORM imports the domain model, and not the other way around.
 * If we call the mapper function, we will be able to easily load and save domain model instances from and to the database. But if we never call that function, our domain model classes stay blissfully unaware of the database.
 * The *start_mappers()* function is binded in the session, which is used every time ORM talks to database.
 
@@ -209,7 +213,7 @@ def allocate_endpoint():
     batches = session.query(Batch).all()
     # call our domain service
     allocate(line, batches)
-	  #save the allocation back to the database
+	# save the allocation back to the database
     session.commit()
     return 201
 ```
@@ -218,6 +222,16 @@ def allocate_endpoint():
 
 * The repository pattern is an abstraction over persistent storage. It hides the boring details of data access by predending that all of our data is in memory.
 * We swape the *SQLAlchemy abstraction(session.query(Batch))* for a *repository one (batches_repo.get)*
+* The repository pattern is a simplifying abstraction over the data storage, allowing us to decouple our model layer from the data layer. We'll build a *Repository* object that sits between our domain mode and the database. (p24)
+* The repository pattern is an abstraction over persistent storage. It hids the boring details of data access by pretending that all of our data is in memory (the objects are all in memory). (p27)
+
+![repositories](repositories.PNG)
+
+* Our domain model has no dependencies whatsoever (Depending on a helper library is fine; depending on an ORM or a web framework is not). (p25)
+
+<img src="onion_architecture.PNG" alt="onion_architecture" style="zoom:75%;" />
+
+* We don't want infrastructure concerns bleeding over into our domain model and slowing our unit tests or our ability to make changes.(p25)
 
 <img src="repository.PNG" alt="repository" style="zoom:50%;" />
 
@@ -246,8 +260,6 @@ def allocate_endpoint():
 	session.commit()
 	return 201
 ```
-
-
 
 ## Chapter 3. A Brief Interlude: On Coupling and Abstractions
 
