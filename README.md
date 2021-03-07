@@ -148,7 +148,7 @@ In this chapter we'll need a way to retrieve batch info from the database and in
 
 *High level modules (model.py) should not depend upon low level modules (orm.py). Both should depend upon abstractions.*
 
-​																																							                 --- 依赖倒置原则（The Dependency Inversion Principle）
+​																															  --- 依赖倒置原则（The Dependency Inversion Principle）
 
 *  ORM ensures the *persistence ignorance* (the domain model doesn't need to know anything about how data is loaded and persisted).(p26)
 
