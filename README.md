@@ -263,7 +263,34 @@ def allocate_endpoint():
 
 ## Chapter 3. A Brief Interlude: On Coupling and Abstractions
 
-Coupling(耦合)： When we're unable to change component A for fear of breaking component B, we say that the component have become coupled.
+* The repository pattern is an abstraction over permanent storage. 
+
+* The abstraction hides messy details and reduces the degree of coupling between systems. (*Coupling(耦合)： When we're unable to change component A for fear of breaking component B, we say that the component have become coupled. It may increase risk and the cost of changing our code.*) (p33).
+
+<img src="abstraction.PNG" alt="image" style="zoom:65%;" />
+
+### What is the abstraction? - A Case Study
+
+The program will do:
+
+* If a file exists in the source but not in the destinatioin, copy the file over
+* If a file exists in the source, but it has a different name than in the destination, rename the destination file to match
+* If a file exists in the destination but not in the source, remove it
+
+We can decide three distinct things:
+
+1. We interrogate the filesystem by using os.walk and determine hashes for a serise of paths. This is similar in both the source and the destination cases.
+2. We decide whether a file is new, renamed, or redundant
+3. We copy, move, or delete files to match the source
+
+**Step 2 is the core logic and step 3 is the I/O**. From step 2 to step 3, the abstraction will separate *what we want to do from how to do it*. We're going to make our program output a list of commands that looks like: *("COPY", "sourcepath", "destpath"), ("MOVE", "old", "new")*.
+
+Here are rule of thumb to find right abstractioin:
+
+* Can I choose a familiar Python data structure to represent the state of the messy system and then try to imagine a single function that can return that state?
+* Where can I drawaline betweenmy systems, where can I carve out a seam to stick that abstraction in? 
+* What is a sensible way of dividing things into components with different responsibilities? What implicit concepts can I make explicit? 
+* What are the dependencies,and what is the core business logic?
 
 ## Chapter 4. Our First Use Case: Flask API and Service Layer
 
