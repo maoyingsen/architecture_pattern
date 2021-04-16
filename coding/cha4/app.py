@@ -3,8 +3,11 @@ from repository import SqlAlchemyRepository
 from model import Batch, OrderLine, allocate
 from conftest import session_db, session_in_memory_db
 from datetime import datetime
+from serialize import OrderSchema
 
 app = Flask(__name__)
+
+orderschema = OrderSchema()
 
 #session_env = session_in_memory_db()
 session_env = session_db()
@@ -28,7 +31,8 @@ def allocate():
     repo = SqlAlchemyRepository(session_env)
     # input example: {"id": "324212", "sku": "bed", "qty": 5}
     line = OrderLine(orderid = request.json['id'], sku = request.json['sku'], qty = request.json['qty'])
-    return jsonify(repo.list())
+    print(line)
+    return jsonify({"line": orderschema.dump(line)})
     """
     try:
         allocate(line, repo.list())

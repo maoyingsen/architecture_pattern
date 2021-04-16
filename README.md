@@ -296,7 +296,7 @@ Here are rule of thumb to find right abstractioin:
 
 So far, we have the core of our **domain model** and the **domain service** we need to allocate orders, and we have the **repository interface** for permanent storage. (p41) 
 
-We're going to add a Flask API endpoint(**service layer**) in front of our allocate domain service, which will server as the entrypoint to our domain model.(p39). The service layer defines the *use case* of the system.
+We're going to add a Flask API endpoint (**the service layer**) in front of our allocate domain service, which will server as the entrypoint to our domain model.(p39). The service layer defines the *use case* of the system.
 
 
 
@@ -308,6 +308,10 @@ Serivce layer consists of service layer function and Flask endpoint.
 
 ```python
 #service.py
+import model 
+from model import OrderLine
+from repository import AbstractRepository
+
 def allocate(line: OrderLine, repo: AbstractRepository, session) -> str:
     batches = repo.list()
     if not is_valid_sku(line.sku, batches):
@@ -324,12 +328,64 @@ Typical service-layer function have similar steps:
 3. Call a domain service
 4. Save/update any state changed
 
-The last step is a little unsatifactory at the moment, as our service layer is tightly coupled to our database layer. **We'll improve that in Chapter 6**
+The *service layer* has two dependencies (shown below): the **demoain model** and the **AbstractRepository**. 
+
+<img src="serviceDepend.PNG" alt="file_structure" style="zoom:60%;" />
+
+When we run the tests, the figure below shows how we implement the abstract dependendcies by using the FakeRepository.
+
+<img src="AbstractionRepo.PNG" alt="architecture" style="zoom:60%;" />
+
+```python
+# test_services.py
+import model
+import services
+
+class FakeRepository(AbstractRepository):
+    def __init__(self, batches):
+        self._batches = set(batches)
+    def add(self, batch):
+        self._batches.add(batch)
+    def get(self, reference):
+        return next(b for b in self._batches if b.reference == reference)
+    def list(self):
+        return list(self._batches)
+"""
+class SqlAlchemyRepository(AbstractRepository):
+    def __init__(self, session):
+        self.session = session
+    def add(self, batch):
+        self.session.add(batch)
+    def get(self, reference):
+        return self.session.query(model.Batch).filter_by(reference=reference).one()
+    def list(self):
+        return self.session.query(model.Batch).all()
+"""
+    
+class FakeSession():
+    committed = False
+    def commit(self):
+        self.committed = True
+
+def test_returns_allocation():
+    line = model.OrderLine("o1", "COMPLICATED-LAMP", 10)
+    batch = model.Batch("b1", "COMPLICATED-LAMP", 100, eta=None)
+    repo = FakeRepository([batch])
+    result = services.allocate(line, repo, FakeSession())
+    assert result == "b1"
+```
+
+So far, two things need to be improved:
+
+* The service layer is still tightly couple to the domain, because its API is expressed in terms of OrderLine objects. We'll fix that in Chapter 5.
+* The service layer is tightly coupled to a session object. In chapter 6 we'll improve that by introducing one more pattern that works closely with the Respository and Service Layer patterns, the Unit of Work pattern.
 
 Flask app delegating to service layer.
 
 ```python
 #flask_app.py
+import services
+
 @app.route("/allocate", methods=['POST'])
 def allocate_endpoint():
     session = get_session()
@@ -353,7 +409,11 @@ Flask app does the standard web stuff:
 2. Parse information out of POST parameter
 3. Return JSON responses with the appropriate status code
 
-### Domain Service
+When we run the app, the **dependency at run** time is shown below.
+
+<img src="architecture.PNG" alt="architecture" style="zoom:70%;" />
+
+### Domain Service vs Service Layer
 
 A piece of logic that *belongs in the domain model* but doesn't sit naturally inside a stateful entity or value object. For example, if you were building a shopping cart application, you might choose to build taxation rules as a domain service. Calculating tax is a separate job from updating the cart,and it's an important part ofthe model, but it doesn't  seem right to have a persisted entity for the job. Instead a stateless TaxCalculator class or a calculate_tax function can do the job. 
 
@@ -370,7 +430,7 @@ def allocate(line: OrderLine, batches: List[Batch]) -> str:
         raise OutOfStock(f'Out of stock for sku {line.sku}')
 ```
 
-### The difference between Service Layer and Domain Service
+**The difference between Service Layer and Domain Service**
 
 The main goal of *service layer*, also called *application service*, is:
 
@@ -385,42 +445,140 @@ These are boring work that has to happen for every operation in your system, and
 
 Adpaters will fill up with any other abstractions around external I/O (e.g. a reds_client.py). 
 
-<img src="file_structure.PNG" alt="file_structure" style="zoom:50%;" />
+<img src="file_structure.PNG" alt="file_structure" style="zoom:60%;" />
 
-<img src="architecture.PNG" alt="architecture" style="zoom:50%;" />
+## Chapter 6 - Unit of Work Pattern
 
+Without UoW, the Flask API talks directly to (**three dependencies**):
 
+* the database layer to start a session
+* the repository layer to initialize SQLAlchemyRepository
+* the service layer to ask it to allocate
 
-* The service layer is still tightly couple to the domain, because its API is expressed in terms of OrderLine objects. We'll fix that in Chapter 5.
-* The service layer is tightly coupled to a session object. In chapter 6 we'll improve that by introducing one more pattern that works closely with the Respository and Service Layer patterns, the Unit of Work pattern.
+The services layer has two denpendencies:
 
-## SQLAlchemy
+* The domain model, which implements the allocation of the order to corrent batch.
+* The repository,  which is a abstraction over the idea of persistent storage
 
-### Engine
-
-* The *engine* is how SQLAlchemy communicates with your database. 
-* When creating the *engine* you should add your database URL.
+<img src="noUoW.PNG" alt="file_structure" style="zoom:80%;" />
 
 ```python
-from sqlalchemy import create_engine
-engine = create_engine('sqlite:///:memory:', echo = True)
+# flask_app.py
+@app.route("/allocate", methods=['POST'])
+def allocate_endpoint():
+    session = get_session()
+    repo = repository.SqlAlchemyRepository(session)
+    line = model.OrderLine(
+        request.json['orderid'],
+        request.json['sku'],
+        request.json['qty'],
+    )
+    try:
+        batchref = services.allocate(line, repo, session)
+    except (model.OutOfStock, services.InvalidSku) as e:
+        return jsonify({'message': str(e)}), 400
+
+    return jsonify({'batchref': batchref}), 201
 ```
 
-### Session
-
-* The SQLAlchemy ORM must have a *session* to make the middle-ground between the objects we will deal with in Python and the engine that actually communicates with the database.
-* You will have to create the Session object everytime you want to communicate with the database.
-* We can create the *session* by using function *sessionmaker* that we'll pass our engine to.
-
 ```python
-from sqlalchemy.orm import sessionmaker
-Session = sessionmaker(bind=engine)
+#service.py
+import model 
+from model import OrderLine
+from repository import AbstractRepository
+
+def allocate(line: OrderLine, repo: AbstractRepository, session) -> str:
+    batches = repo.list()
+    if not is_valid_sku(line.sku, batches):
+        raise InvalidSku(f'Invalid sku {line.sku}')
+    batchref = model.allocate(line, batches)
+    session.commit()
+    return batchref
 ```
 
-* You should call session make once in your application at the global scope, and once you have access to the custom Session class, you can instantiate it as many times as you need without passing any arguments to it.
+With UoW, the Flask API only does two things (**two dependencies**):
+
+* it initilizes a unit of work
+* it involves the service
+
+<img src="hasUoW.PNG" alt="file_structure" style="zoom:80%;" />
 
 ```python
-session = Session()
+# flask_app.py
+@app.route("/add_batch", methods=['POST'])
+def add_batch():
+    eta = request.json['eta']
+    if eta is not None:
+        eta = datetime.fromisoformat(eta).date()
+    services.add_batch(request.json['ref'], request.json['sku'], request.json['qty'], eta, unit_of_work.SqlAlchemyUnitOfWork())
+    return 'OK', 201
+
+@app.route("/allocate", methods=['POST'])
+def allocate_endpoint():
+    try:
+        batchref = services.allocate(request.json['orderid'], request.json['sku'], request.json['qty'], 		            	
+                                     unit_of_work.SqlAlchemyUnitOfWork())
+    except (model.OutOfStock, services.InvalidSku) as e:
+        return jsonify({'message': str(e)}), 400
+    return jsonify({'batchref': batchref}), 201
+```
+
+```python
+#service.py
+def add_batch(ref: str, sku: str, qty: int, eta: Optional[date], uow: unit_of_work.AbstractUnitOfWork):
+    with uow:
+        uow.batches.add(model.Batch(ref, sku, qty, eta))
+        uow.commit()
+
+def allocate(orderid: str, sku: str, qty: int, uow: unit_of_work.AbstractUnitOfWork) -> str:
+    line = OrderLine(orderid, sku, qty)
+    with uow:
+        batches = uow.batches.list()
+        if not is_valid_sku(line.sku, batches):
+            raise InvalidSku(f'Invalid sku {line.sku}')
+        batchref = model.allocate(line, batches)
+        uow.commit()
+    return batchref
+```
+
+The UoW act as a single entrypoint to our persistent storage, if the repository pattern is our abstraction over the idea of persistent storage, the UoW pattern is an abstraction over the idea of atomic operations. It allows us to decouple our service layer from the data layer. 
+
+In code level the UoW has three characters:
+
+1. uow provides the class variable ```batch```  that has variable type of ```SQLAlchemyRepository```, which is defined in the ```__enter__``` method of the concrete class.
+
+```python
+class AbstractUnitOfWork(abc.ABC):
+    batches: repository.AbstractRepository
+        
+    def __enter__(self) -> AbstractUnitOfWork:
+        return self
+    def __exit__(self, *args):
+        self.rollback()
+     ....
+```
+
+2. uow is a context manager which is a useful way to persist all of our changes at once, so if something goes wrong, we don't end up in an inconsistent state. The ```__enter__``` execute when we enter the ```with``` block and ```__exit__``` execute when we exit it **or there is an exception**.
+
+   **context manager is a really nice Pythonic way of visually grouping code into blocks that we want happen atomically (atomic operation)**
+
+3. uow provides a ```__enter__``` method that is responsible for starting a database session and instantiating a real repository that can use that session.
+
+```python
+class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
+    def __init__(self, session_factory=DEFAULT_SESSION_FACTORY):
+        self.session_factory = session_factory
+    def __enter__(self):
+        self.session = self.session_factory()  # type: Session
+        self.batches = repository.SqlAlchemyRepository(self.session)
+        return super().__enter__()
+    def __exit__(self, *args):
+        super().__exit__(*args)
+        self.session.close()
+    def commit(self):
+        self.session.commit()
+    def rollback(self):
+        self.session.rollback()
 ```
 
 
