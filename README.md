@@ -55,11 +55,11 @@ build persistence-ignorant code
 
 create stable APIs around our domain 
 
-## Chapter 1. Domain Modeling
+## Chapter 1. Domain Modeling（业务领域建模）
 
 ### Domain Modeling Concept
 
-* Among the three-layered architecture (presentation layer, business logic, database layer), the **domain model** is close to business logic. The **domain model** is the mental map that business owners have of their business. (p14) 
+* Among the three-layered architecture (presentation layer, business logic, database layer), the **domain model（领域模型）** is close to business logic. The **domain model** is the mental map that business owners have of their business. (p14) 
 * The book shows the basic of building a domain model, and building an architecture around it that *leaves the model as free as possible from external constraints*. (p15)
 * Domain modeling is closest to the business. *Make it easy to understand and modify*. (22)
 
@@ -69,7 +69,7 @@ We have separate systems that are responsible for buying stock, selling stock to
 
 <img src="Allocation_system.PNG" alt="Allocation_System" style="zoom:75%;" />
 
-Now we build a simple domain model that can allocate orders to batches of stock. Below is the related **domain knowlege** for the allocation system.
+Now we build a simple domain model that can allocate orders to batches of stock. Below is the related **domain knowlege（领域知识）** for the allocation system.
 
 * Customers place orders. An order is identified by an order reference and comprises multiple order lines, where each line has  SKU and a quantity.
 * Purchasing department orders small batches of stock. A batch of stock has a unique ID called a reference, a SKU, and a quantity.
@@ -78,7 +78,7 @@ Now we build a simple domain model that can allocate orders to batches of stock.
 
  A batch now keeps track of a set of allocated OrderLine objects. When we allocate, if we have enought available quantity, we just add to the set. (p19)
 
-**Value Object**
+**Value Object（值对象）**
 
 * Whenever we have a business concept that has data but no identity, we often choose to represent it using *Value Object* pattern. A value object is any domain object that is uniquely identified by the data it holds; we usually make them immutable. (p19)
 * An order line is uniquely identifies by its order ID, SKU, and quantity; if we change one of those values, we now have a new line. (p20)
@@ -91,7 +91,7 @@ class OrderLine:
     qty: int
 ```
 
-**Entities**
+**Entities（实体）**
 
 * Entities, unlike values, have identity equality. We can change their values, and they are sitll recognizable the same thing. （p20)
 * A batch is identifies by a reference and thus is classified as entities. We can allocate lines to batch, or change the data that we expect it to arrive, and it will still be the same entity. （p20)
@@ -583,3 +583,30 @@ class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
 
 
 
+# Chapter 7 - Aggregates and Consistency Boundaries
+
+The system has to ensure **constraint** and **Invariant**. They are the things that have to be ture whenever we finish an operation. Below are examples:
+
+* An order line can be allocated to only one batch at a time.
+* We can't allocate to a batch if the available quantity is less than the quantity of the order line.
+
+In a single-threaded, single-user application, it's relatively easy for us to maintain the invariant. This gets much harder when we introduce the idea of *concurrency*. For example, we might be allocating stock for multiple order lines simultanenously.
+
+We usually solve this problem by applying *locks* to our database tables. This prevents two operations from happening simultaneously on the same rwo or same table.
+
+However, if we process tens of thousands of orders per hour, and hundreds of thousands of order lines, we can't hold a lock over the whole batches table for every single one. We'll get *deadlocks* or *performance problems* at the very least.
+
+Therefore, we can't lock the whole database table every time we want to allocate an order line, what should we do instead? The answer is **Aggregate**. An aggregate is a domain object (eg. Product, Cart) that contains other domain object (eg. Batch, Product) and lets us treat the whole collection as a single unit.
+
+*An aggregate is a cluster of associated objects that we treat as a unit for the purpose of data changes*. The aggregate has a root entity (the Cart) that encapsulates access to items. Each item has it own identity, but other parts of system will always refer to the Cart only as an indivisible whole.
+
+As we only interested in batches that have the same SKU as order line, we name Product as our aggregate. 
+
+<img src="beforeAggregate.PNG" alt="file_structure" style="zoom:80%;" />
+
+<img src="afterAggregate.PNG" alt="file_structure" style="zoom:80%;" />
+
+**Bounded context(界限上下文)** in DDD :
+
+* instead of attempting capture entire business into a single model, the model or attribute with same name can have entirely different meanings in different contexts. Eg. the word customer means different things to people in sales, customer services, logistics, support and so on.
+* In our example, the allocation service has Product (sku, batches), whereas the ecommerce will have Product (sku, description, price, image_url, dimensions, etc..). As a rule of thumb, your domain models should include only the data that they need for performing calculations.
